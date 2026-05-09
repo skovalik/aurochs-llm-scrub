@@ -1,0 +1,50 @@
+# =============================================================================
+# Line endings: enforce LF on shell scripts and the .githooks tree so the
+# pre-commit hooks keep working when this repo is cloned on Windows. CRLF in
+# bash scripts breaks the shebang on POSIX kernels.
+# =============================================================================
+
+* text=auto eol=lf
+
+# Source code
+*.py        text eol=lf
+*.pyi       text eol=lf
+*.toml      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.txt       text eol=lf
+*.cfg       text eol=lf
+*.ini       text eol=lf
+
+# Shell / scripts
+*.sh        text eol=lf
+*.bash      text eol=lf
+*.ps1       text eol=lf
+.githooks/* text eol=lf
+
+# -----------------------------------------------------------------------------
+# Treat the local PII rules file as binary even if accidentally tracked.
+# This prevents diff/blame leakage of the personal pattern file when somebody
+# slips and `git add .pii-rules.local`s it before realizing.
+# -----------------------------------------------------------------------------
+.pii-rules.local binary
+
+# -----------------------------------------------------------------------------
+# Binary file types — explicit so git doesn't try to "fix" them
+# -----------------------------------------------------------------------------
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.svg       text eol=lf
+*.pdf       binary
+*.zip       binary
+*.tar       binary
+*.gz        binary
+*.tgz       binary
+*.zst       binary
+*.whl       binary
+*.db        binary

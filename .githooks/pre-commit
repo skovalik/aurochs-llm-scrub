@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# =============================================================================
+# aurochs-llm-scrub pre-commit dispatcher
+#
+# Runs both scanners in sequence; either failing aborts the commit. Each
+# scanner is its own script so users can wire them in independently if they
+# want. To bypass (rare, documented in CONTRIBUTING.md): `git commit --no-verify`.
+# =============================================================================
+
+set -e
+
+HOOK_DIR="$(git rev-parse --show-toplevel)/.githooks"
+
+if [ -x "$HOOK_DIR/pre-commit-pii" ]; then
+    "$HOOK_DIR/pre-commit-pii" || exit $?
+fi
+
+if [ -x "$HOOK_DIR/pre-commit-secrets" ]; then
+    "$HOOK_DIR/pre-commit-secrets" || exit $?
+fi
+
+exit 0

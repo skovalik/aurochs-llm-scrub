@@ -1,0 +1,50 @@
+# =============================================================================
+# .pii-rules.local — TEMPLATE
+#
+# Copy this file to `.pii-rules.local` (gitignored) and add patterns specific
+# to your commits: client names, family names, internal codenames, anything
+# that must NEVER enter a public commit.
+#
+# Format: one regex per non-blank, non-comment line. Same engine as
+# .githooks/pii-rules-generic.txt. Lines beginning with `#` are comments.
+#
+# YAML-style category headers (commented out below) are PURELY for human
+# organization — the scanner ignores them. They're here so you can group
+# patterns when the file grows.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# client_names:
+#   Add client / company names here. Use word boundaries (\b) where you want
+#   to avoid matching substrings.
+# -----------------------------------------------------------------------------
+
+# Example:
+# \bClientCo\b
+# \bAnotherCompany\b
+
+# -----------------------------------------------------------------------------
+# personal_names:
+#   Family members, roommates, partners, collaborators by handle.
+# -----------------------------------------------------------------------------
+
+# Example:
+# \bFirstName Lastname\b
+# \bNickname\b
+
+# -----------------------------------------------------------------------------
+# internal_codenames:
+#   Project codenames you don't want public, internal product names, etc.
+# -----------------------------------------------------------------------------
+
+# Example:
+# \bProjectAlbatross\b
+
+# -----------------------------------------------------------------------------
+# personal_handles:
+#   Discord handles, IRC nicks, gamer tags. (Email is already in the generic
+#   ruleset; these are platform-specific identifiers.)
+# -----------------------------------------------------------------------------
+
+# Example:
+# @your_handle\b

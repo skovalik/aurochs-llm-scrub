@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# =============================================================================
+# aurochs-llm-scrub pre-commit-pii
+#
+# Scans staged file contents for PII patterns. BLOCKS the commit on any hit.
+# Loads three rule files:
+#   .githooks/pii-rules-generic.txt           public, generic (committed)
+#   .pii-rules.local                          personal patterns (gitignored, optional)
+#   ~/.config/aurochs-dev/pii-denylist.txt    per-developer, machine-wide (optional)
+#
+# Missing optional files are silently skipped by the engine. The home-dir file
+# lets one master denylist cover every agency-line plugin from a single place
+# outside any repo.
+#
+# Bypass (documented escape hatch): `git commit --no-verify`
+# =============================================================================
+
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+SCAN="$REPO_ROOT/.githooks/_scan_engine.py"
+
+PYTHON="${PYTHON:-python3}"
+if ! command -v "$PYTHON" >/dev/null 2>&1; then
+    PYTHON=python
+fi
+
+exec "$PYTHON" "$SCAN" \
+    --label PII \
+    --rules "$REPO_ROOT/.githooks/pii-rules-generic.txt" \
+    --rules "$REPO_ROOT/.pii-rules.local" \
+    --rules "${HOME}/.config/aurochs-dev/pii-denylist.txt"
