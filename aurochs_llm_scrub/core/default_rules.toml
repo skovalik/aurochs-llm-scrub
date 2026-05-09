@@ -1,0 +1,126 @@
+# aurochs-llm-scrub — default rule pack v0.1.0
+#
+# Hand-picked starter set. Real patterns Stefan has been scrubbing by
+# hand from LLM-assisted drafts. Each rule's `description` is a one-line
+# rationale; severity is the pack-author intent (workspace
+# [severity_overrides] can promote/demote at runtime).
+#
+# Language attribution per plan v4 A1:
+#   language = ""    → language-independent, always runs (mechanical)
+#   language = "en"  → English-coded, gated by language detection
+#
+# Pack identity:
+#   (name, version) is the unique identifier. Bumping `version` when
+#   adding/changing rules creates a new historical pack row; old
+#   findings keep referencing the original pack via FK.
+#
+# Schema version of the TOML file format itself; bumps require
+# `llm-scrub rules migrate` per plan v4.
+
+schema_version = "0.1.0"
+name = "default"
+version = "0.1.0"
+
+# ---------------------------------------------------------------------------
+# P0 — Hard Violations (mechanical, language = "")
+# ---------------------------------------------------------------------------
+
+[[rule]]
+rule_id = "p0-em-dash"
+name = "Em dash (—)"
+severity = "P0"
+language = ""
+pattern = "—"
+description = "Em dash overuse is the single loudest LLM tell. Replace with comma + space, period, or semicolon. Auto-fixable to ', '."
+
+[[rule]]
+rule_id = "p0-mdash-entity"
+name = "&mdash; HTML entity"
+severity = "P0"
+language = ""
+pattern = "&mdash;"
+description = "HTML em-dash entity in markdown source typically indicates a copy-paste from rich-text rendering of LLM output. Auto-fixable."
+
+[[rule]]
+rule_id = "p0-double-space"
+name = "Double space"
+severity = "P0"
+language = ""
+pattern = "  "
+description = "Two or more consecutive ASCII spaces. Mechanical artifact; auto-fixable to single space."
+
+[[rule]]
+rule_id = "p0-trailing-whitespace"
+name = "Trailing whitespace"
+severity = "P0"
+language = ""
+pattern = "[ \\t]+$"
+description = "Whitespace at end of line. Auto-fixable: strip."
+
+# ---------------------------------------------------------------------------
+# P1 — LLM Signposting (English-coded, language = "en")
+# ---------------------------------------------------------------------------
+
+[[rule]]
+rule_id = "p1-sycophantic-opener"
+name = "Sycophantic opener"
+severity = "P1"
+language = "en"
+pattern = "(?im)^(great question|excellent question|that's a great|absolutely|certainly,|of course)\\b"
+description = "Sycophantic conversation openers. Drop the opener and start with substance."
+
+[[rule]]
+rule_id = "p1-its-worth-noting"
+name = "It's worth noting"
+severity = "P1"
+language = "en"
+pattern = "(?i)\\bit['’]?s worth (noting|mentioning|pointing out)\\b"
+description = "Hollow hedging preamble. If it's worth noting, just note it."
+
+[[rule]]
+rule_id = "p1-not-just-but"
+name = "Not just X but Y"
+severity = "P1"
+language = "en"
+pattern = "(?i)\\bnot just\\b[^.!?]{1,80}?\\bbut\\b"
+description = "Diminish-then-elevate rhetorical scaffolding. Cut the diminishing half; lead with the substantive claim."
+
+[[rule]]
+rule_id = "p1-hollow-conclusion"
+name = "Hollow conclusion"
+severity = "P1"
+language = "en"
+pattern = "(?im)^(in conclusion|to sum up|in summary|to summarize|all in all)\\b"
+description = "Conclusion preambles that don't conclude anything. Cut the preamble; let the closing claim stand."
+
+[[rule]]
+rule_id = "p1-let-me-be-clear"
+name = "Let me be clear"
+severity = "P1"
+language = "en"
+pattern = "(?i)\\b(let me be clear|to be clear|to put it simply|put simply)\\b"
+description = "Transition filler that performs clarity instead of being clear. Just be clear."
+
+[[rule]]
+rule_id = "p1-thats-the"
+name = "That's the X"
+severity = "P1"
+language = "en"
+pattern = "(?i)\\bthat['’]?s the (real|whole|entire|true|key|core|essential)\\b"
+description = "LLM summarization signature. Reframe as a direct claim."
+
+[[rule]]
+rule_id = "p1-vague-quantifier"
+name = "Vague quantifier"
+severity = "P1"
+language = "en"
+pattern = "(?i)\\b(various|myriad|numerous|a number of|several different)\\b"
+description = "Imprecise count language. Replace with a specific number or drop the count."
+
+[[rule]]
+rule_id = "p1-corporate-filler"
+name = "Corporate filler"
+severity = "P1"
+language = "en"
+pattern = "(?i)\\b(robust|comprehensive|seamless|cutting-edge|best-in-class|industry-leading)\\b"
+description = "Adjectives that decorate without describing. Cut or replace with a concrete property."
