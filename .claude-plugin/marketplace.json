@@ -17,7 +17,7 @@
         "name": "Stefan Kovalik",
         "email": "stefan@aurochs.agency"
       },
-      "source": ".",
+      "source": "./",
       "category": "developer-tools",
       "homepage": "https://github.com/skovalik/aurochs-llm-scrub",
       "tags": ["llm-scrub", "writing", "pre-commit", "ai-text-detection", "mcp", "regex"]
