@@ -43,15 +43,13 @@ classifiers = [
 ]
 dependencies = [
     "aurochs-core>=0.1.0,<0.2.0",
-    "psutil>=5.9",
-    "platformdirs>=4.0",
     "langdetect>=1.0",
+    "mcp>=0.9",
+    "platformdirs>=4.0",
+    "psutil>=5.9",
 ]
 
 [project.optional-dependencies]
-mcp = [
-    "mcp>=0.9",
-]
 # `redos-detector` ships as an optional ReDoS *static* checker. The
 # engine's load-bearing defense is the per-rule wall-clock timeout
 # (BLOCKER #4 in plan v4 / scrubber.py); the static check is a
@@ -70,7 +68,7 @@ dev = [
     "types-psutil",
 ]
 all = [
-    "aurochs-llm-scrub[mcp]",
+    "aurochs-llm-scrub[redos]",
 ]
 
 [project.scripts]

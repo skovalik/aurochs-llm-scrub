@@ -3,8 +3,8 @@
 ## Does this call an LLM?
 
 No. v0.1 is pure regex + langdetect. There are zero outbound network
-calls — `core/` and `cli/` make none, and the `[mcp]` server is a
-local stdio JSON-RPC endpoint, not an HTTP service. LLM-as-judge is
+calls — `core/` and `cli/` make none, and the MCP server is a local
+stdio JSON-RPC endpoint, not an HTTP service. LLM-as-judge is
 on the v0.2 roadmap as an opt-in extra; the defaults will stay
 regex-first.
 

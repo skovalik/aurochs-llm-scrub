@@ -75,9 +75,8 @@ llm-scrub install-precommit             # add to .git/hooks/pre-commit
 ## Install
 
 ```bash
-pip install aurochs-llm-scrub              # core: CLI + default pack + runs.db + redactor + hook
-pip install "aurochs-llm-scrub[mcp]"       # plus MCP server (4 tools)
-pip install "aurochs-llm-scrub[mcp,redos]" # plus static ReDoS pre-check
+pip install aurochs-llm-scrub              # core: CLI + MCP server + default pack + runs.db + redactor + hook
+pip install "aurochs-llm-scrub[redos]"     # plus static ReDoS pre-check
 pip install "aurochs-llm-scrub[all]"       # everything above at once
 ```
 
@@ -85,10 +84,9 @@ Optional extras:
 
 | Extra      | What it adds                                                                  |
 | ---------- | ----------------------------------------------------------------------------- |
-| `[mcp]`    | Anthropic MCP SDK — runs the scrub MCP server. Required for the Claude Code plugin's auto-wired tools. |
 | `[redos]`  | `redos-detector` — static ReDoS pre-check at rule-load time. Best-effort; the engine's load-bearing defense is the per-rule wall-clock timeout. |
 | `[dev]`    | pytest, pytest-cov, ruff, mypy, types-psutil.                                 |
-| `[all]`    | Everything above (currently equivalent to `[mcp]`; will broaden in v0.2).     |
+| `[all]`    | Currently equivalent to `[redos]`; will broaden in v0.2.                      |
 
 Requires Python 3.13 or newer. Linux / macOS / Windows.
 
@@ -121,9 +119,9 @@ llm-scrub verify                           # FK + format integrity checks
 llm-scrub verify --deep                    # adds WAL walk + content-hash checks
 ```
 
-The CLI is the source of truth. The MCP server (`[mcp]` extra) and
-the Claude Code plugin both call into the same `core/` API. Full
-flag reference: [`docs/cli.md`](docs/cli.md).
+The CLI is the source of truth. The MCP server and the Claude Code
+plugin both call into the same `core/` API. Full flag reference:
+[`docs/cli.md`](docs/cli.md).
 
 Exit codes are locked:
 

@@ -1,7 +1,7 @@
 # CLI reference
 
-The CLI is the source of truth. The MCP server (`[mcp]` extra) and the
-Claude Code plugin both call into the same `core/` API.
+The CLI is the source of truth. The MCP server and the Claude Code
+plugin both call into the same `core/` API.
 
 ## Global flags
 

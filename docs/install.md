@@ -18,14 +18,12 @@ data-dir resolution), `langdetect` (the language gate).
 
 | Extra      | What it adds                                                                  |
 | ---------- | ----------------------------------------------------------------------------- |
-| `[mcp]`    | Anthropic MCP SDK — runs the scrub MCP server (4 tools, see contracts.md).    |
 | `[redos]`  | `redos-detector` — static ReDoS pre-check at rule-load time. Best-effort.     |
 | `[dev]`    | pytest, pytest-cov, ruff, mypy, types-psutil.                                 |
-| `[all]`    | Everything above (currently equivalent to `[mcp]`; will broaden in v0.2).     |
+| `[all]`    | Currently equivalent to `[redos]`; will broaden in v0.2.                      |
 
 ```bash
-pip install "aurochs-llm-scrub[mcp]"
-pip install "aurochs-llm-scrub[mcp,redos]"
+pip install "aurochs-llm-scrub[redos]"
 ```
 
 The `[redos]` extra is genuinely optional. The engine's load-bearing

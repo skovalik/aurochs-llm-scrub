@@ -68,8 +68,7 @@ source of truth for what each version promises.
 
 ## MCP server tool surface
 
-The MCP server is exposed via the `[mcp]` extra (`pip install
-'aurochs-llm-scrub[mcp]'`). Run it via `python -m
+The MCP server ships in the base install. Run it via `python -m
 aurochs_llm_scrub.mcp.scrub_server` or register it in Claude Desktop's
 `mcpServers` config. The server speaks stdio JSON-RPC per the Model
 Context Protocol spec.
