@@ -36,6 +36,18 @@ llm-scrub install-precommit             # add to .git/hooks/pre-commit
 - Not opinionated about whose voice you want; the rule pack is configurable
 - Not cloud-dependent
 
+## Use as a Claude Code plugin
+
+```bash
+/plugin install aurochs-llm-scrub
+```
+
+Then:
+- `/aurochs-llm-scrub <args>` — full CLI surface
+- `/scrub <file>` — quick scan (shortcut)
+
+The plugin auto-wires the llm-scrub MCP server.
+
 ## Status
 
 v0.1 alpha.

@@ -87,6 +87,8 @@ packages = ["aurochs_llm_scrub"]
 [tool.hatch.build.targets.sdist]
 include = [
     "/aurochs_llm_scrub",
+    "/.claude-plugin",
+    "/commands",
     "/docs",
     "/tests",
     "/README.md",

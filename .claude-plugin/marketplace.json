@@ -1,0 +1,26 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "aurochs-llm-scrub",
+  "metadata": {
+    "description": "Detect and scrub LLM writing patterns from your prose. Regex-based detection, ReDoS-protected, with pre-commit hook integration."
+  },
+  "owner": {
+    "name": "Stefan Kovalik",
+    "email": "stefan@aurochs.agency"
+  },
+  "plugins": [
+    {
+      "name": "aurochs-llm-scrub",
+      "description": "Detect and scrub LLM writing patterns from your prose. Regex-based pattern detection with ReDoS protection. Pre-commit hook integration. No LLM-as-judge in v0.1.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Stefan Kovalik",
+        "email": "stefan@aurochs.agency"
+      },
+      "source": ".",
+      "category": "developer-tools",
+      "homepage": "https://github.com/skovalik/aurochs-llm-scrub",
+      "tags": ["llm-scrub", "writing", "pre-commit", "ai-text-detection", "mcp", "regex"]
+    }
+  ]
+}
