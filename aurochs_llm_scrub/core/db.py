@@ -1,34 +1,20 @@
-"""SQLite connection factory + migration runner.
+"""SQLite migration runner (connection helper imported from aurochs-core).
 
-Every connection MUST go through ``db_connect()``. The pragmas applied
-here are not optional — leaving any of them off changes correctness,
-not just performance:
+The connection helper ``db_connect()`` is now provided by
+``aurochs-core``; see ``aurochs_core.db`` for the canonical pragma
+contract (``foreign_keys=ON``, ``journal_mode=WAL``,
+``synchronous=NORMAL``, ``busy_timeout=30000``, ``isolation_level=None``).
+We re-export it for backwards compatibility with existing
+``from aurochs_llm_scrub.core.db import db_connect`` import sites.
 
-* ``foreign_keys = ON`` — SQLite default is OFF. Without this, every FK
-  declared in the schema is documentation, not enforcement.
-  (Plan v4 BLOCKER #14 — the per-connection pragma is the closer.)
-* ``journal_mode = WAL`` — concurrent readers + one writer; required
-  for the OS-lockfile concurrency model.
-* ``busy_timeout = 30000`` — 30s cap before raising ``database is
-  locked``. The plan v4 ``runs.db`` opt-in spec mentions a 5s busy-
-  timeout for the optional history surface; the spine pragma is the
-  conservative ceiling and runtime can lower it per-connection if the
-  fail-soft buffer path is wired.
-* ``synchronous = NORMAL`` — WAL-safe; ``FULL`` is unnecessary with
-  WAL and costs roughly 2x on bulk inserts (rule-pack registration
-  writes a batch at once on first run).
-
-The runner is a class (``MigrationRunner``) rather than a free
-function because llm-scrub's migration story carries the
+The runner is a class (``MigrationRunner``) rather than a free function
+because llm-scrub's migration story carries the
 ``--baseline-from-existing`` decision, holds the ``MigrateLock``
 across multiple statements, and may need to be reused for the same db
 path inside one CLI invocation (e.g. ``llm-scrub init`` followed by
-``llm-scrub scan`` in the same process).
-
-Connections are NOT thread-safe by default. Multiprocessing workers
-MUST call ``db_connect()`` themselves rather than passing a
-connection across the process boundary — pickling a sqlite3
-Connection is not supported.
+``llm-scrub scan`` in the same process). Migration logic stays
+plugin-local because each plugin owns its own ``schema_version`` table
++ migration files.
 """
 
 from __future__ import annotations
@@ -40,16 +26,7 @@ import time
 from pathlib import Path
 from types import TracebackType
 
-from aurochs_llm_scrub.core.locks import MigrateLock
-
-# Pragmas applied to every connection, in order. Read by tests to
-# assert the contract (test_db enforces ``foreign_keys = ON``).
-_REQUIRED_PRAGMAS: tuple[tuple[str, str], ...] = (
-    ("foreign_keys", "ON"),
-    ("journal_mode", "WAL"),
-    ("synchronous", "NORMAL"),
-    ("busy_timeout", "30000"),
-)
+from aurochs_core import MigrateLock, db_connect
 
 # Conservative lock timeout — the migration runner shouldn't block
 # forever.
@@ -58,64 +35,11 @@ _DEFAULT_LOCK_TIMEOUT_SECONDS: float = 60.0
 _VERSION_RE: re.Pattern[str] = re.compile(r"^(?P<v>\d{4})_")
 _MIGRATIONS_DIR: Path = Path(__file__).parent / "migrations"
 
-
-def db_connect(db_path: Path | str) -> sqlite3.Connection:
-    """Open a sqlite3 Connection with the llm-scrub pragma contract
-    applied.
-
-    Creates the database file if it does not exist (and the parent
-    dir if needed). The caller owns the connection — close it (or
-    use as a context manager) when done.
-
-    Parameters
-    ----------
-    db_path:
-        Path to the runs database file. ``":memory:"`` is supported
-        for tests; pass it as a literal str.
-
-    Returns
-    -------
-    sqlite3.Connection
-        Autocommit connection with ``Row`` row_factory and all
-        required pragmas applied. ``isolation_level=None`` so the
-        caller manages transactions explicitly (BEGIN/COMMIT) —
-        necessary for the EXCLUSIVE migration transactions.
-
-    Raises
-    ------
-    RuntimeError
-        If ``foreign_keys = ON`` did not take (some sqlite builds
-        ignore the pragma inside a transaction; we fail loud rather
-        than silently running with FKs off).
-    """
-    if isinstance(db_path, str) and db_path == ":memory:":
-        target: str | Path = ":memory:"
-    else:
-        target = Path(db_path)
-        if isinstance(target, Path):
-            target.parent.mkdir(parents=True, exist_ok=True)
-
-    conn = sqlite3.connect(
-        str(target),
-        isolation_level=None,  # autocommit; we manage transactions manually
-        check_same_thread=True,
-    )
-    conn.row_factory = sqlite3.Row
-
-    for pragma, value in _REQUIRED_PRAGMAS:
-        conn.execute(f"PRAGMA {pragma} = {value}")
-
-    # Verify foreign_keys actually took. Some sqlite builds ignore the
-    # pragma inside a transaction; fail loud if it didn't.
-    enforced = conn.execute("PRAGMA foreign_keys").fetchone()[0]
-    if enforced != 1:
-        conn.close()
-        raise RuntimeError(
-            "PRAGMA foreign_keys = ON failed to apply. This sqlite build "
-            "may not support FK enforcement; refusing to continue."
-        )
-
-    return conn
+__all__ = [
+    "MigrationError",
+    "MigrationRunner",
+    "db_connect",
+]
 
 
 # ---------------------------------------------------------------------------

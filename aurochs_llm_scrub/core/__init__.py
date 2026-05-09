@@ -29,8 +29,9 @@ module" trap.
 # graph; the ``isort: split`` markers preserve the deliberate order.
 from __future__ import annotations
 
+from aurochs_core import LockError, MigrateLock, WriteLock
+
 from aurochs_llm_scrub.core.db import MigrationError, MigrationRunner, db_connect
-from aurochs_llm_scrub.core.locks import LockError, MigrateLock, WriteLock
 from aurochs_llm_scrub.core.types import (
     HASH_INPUT_VERSION,
     DisabledRuleEntry,

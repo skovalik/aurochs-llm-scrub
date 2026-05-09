@@ -42,6 +42,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
+    "aurochs-core>=0.1.0,<0.2.0",
     "psutil>=5.9",
     "platformdirs>=4.0",
     "langdetect>=1.0",
