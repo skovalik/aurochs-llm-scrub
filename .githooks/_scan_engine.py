@@ -6,8 +6,8 @@ one or more regex pattern files. BLOCKS the commit on any hit by exiting with
 a non-zero status. The matched file path and matched pattern are printed.
 
 Usage:
-    _scan_engine.py --label PII --rules .githooks/pii-rules-generic.txt [--rules .pii-rules.local]
-    _scan_engine.py --label SECRETS --rules .githooks/secret-rules.txt
+    _scan_engine.py --label PII --rules .githooks/pii-rules-generic.txt [--rules .pii-rules.local] [--exempt PATH]
+    _scan_engine.py --label SECRETS --rules .githooks/secret-rules.txt [--exempt PATH]
 
 Behavior:
     * Reads `git diff --cached --name-only --diff-filter=ACMR` for staged paths.
@@ -17,6 +17,12 @@ Behavior:
     * Reads with utf-8 then falls back to latin-1; never crashes on encoding.
     * Optional `--rules` files that don't exist are silently skipped (so a
       missing .pii-rules.local doesn't break anyone's commit).
+    * `--exempt PATH` (repeatable) skips that staged path entirely. Used for
+      the COMMITTED pattern files themselves: their literal patterns (the PEM
+      private-key headers) match their own source lines, so without the
+      exemption no edit to a rules file can ever pass its own scan. Gitignored
+      pattern files (.pii-rules.local) are deliberately NOT exempted — if one
+      is ever force-staged, blocking is the correct outcome.
     * `--no-verify` is the documented bypass.
 """
 
@@ -137,6 +143,16 @@ def main() -> int:
         type=Path,
         help="Path to a rules file (repeatable; missing optional rules are skipped)",
     )
+    parser.add_argument(
+        "--exempt",
+        action="append",
+        default=[],
+        type=Path,
+        help=(
+            "Staged path to skip entirely (repeatable). For the committed "
+            "pattern files, whose literal patterns self-match on every edit."
+        ),
+    )
     args = parser.parse_args()
 
     patterns = load_patterns(args.rules)
@@ -148,9 +164,13 @@ def main() -> int:
     if not files:
         return 0
 
+    exempt = {p.resolve() for p in args.exempt}
+
     all_hits: list[tuple[Path, list[tuple[Path, int, re.Pattern[str], str]]]] = []
     for path in files:
         if not path.exists():
+            continue
+        if path.resolve() in exempt:
             continue
         hits = scan_file(path, patterns)
         if hits:

@@ -25,8 +25,13 @@ if ! command -v "$PYTHON" >/dev/null 2>&1; then
     PYTHON=python
 fi
 
+# The two COMMITTED pattern files are exempted from scanning: their literal
+# patterns (PEM private-key headers) self-match, so no edit to them could
+# ever pass. The gitignored .pii-rules.local is deliberately NOT exempted.
 exec "$PYTHON" "$SCAN" \
     --label PII \
     --rules "$REPO_ROOT/.githooks/pii-rules-generic.txt" \
     --rules "$REPO_ROOT/.pii-rules.local" \
-    --rules "${HOME}/.config/aurochs-dev/pii-denylist.txt"
+    --rules "${HOME}/.config/aurochs-dev/pii-denylist.txt" \
+    --exempt "$REPO_ROOT/.githooks/pii-rules-generic.txt" \
+    --exempt "$REPO_ROOT/.githooks/secret-rules.txt"

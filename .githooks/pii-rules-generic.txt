@@ -10,9 +10,14 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Email addresses (any non-whitespace local + @ + domain + TLD)
+# Email addresses — word-char local part + domain ending in an alphabetic TLD.
+# Deliberately tighter than \S+@\S+: JSON-LD "@context / "@type fixtures,
+# decorator / path "@" tokens, and pack labels like default@0.1.0 are not
+# emails and must not fire. Known intentional match that remains: the public
+# author email in pyproject / plugin manifests — commits staging those files
+# use the documented --no-verify escape hatch (see README "Bypass").
 # -----------------------------------------------------------------------------
-\S+@\S+\.\w+
+[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}
 
 # -----------------------------------------------------------------------------
 # Credentials and access tokens
