@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aurochs-llm-scrub"
-version = "0.1.0"
+version = "0.2.0"
 description = "Detect and scrub LLM writing patterns from your prose."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -73,6 +73,10 @@ all = [
 
 [project.scripts]
 "llm-scrub" = "aurochs_llm_scrub.cli.main:main"
+# MCP server entry point — the plugin manifest launches this shim so the
+# server runs in the tool's own env (uv tool / pipx), not whatever
+# `python` resolves first on PATH.
+"llm-scrub-mcp" = "aurochs_llm_scrub.mcp.scrub_server:main"
 
 [project.urls]
 Homepage = "https://github.com/skovalik/aurochs-llm-scrub"

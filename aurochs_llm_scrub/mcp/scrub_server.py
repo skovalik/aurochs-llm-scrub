@@ -844,7 +844,7 @@ def build_server(*, db_path: Path | None = None) -> Any:
 
     _validate_schema_alignment()
 
-    server: Any = Server("aurochs-llm-scrub", version="0.1.0")
+    server: Any = Server("aurochs-llm-scrub", version="0.2.0")
     resolved_db = db_path or _default_runs_db_path()
 
     @server.list_tools()  # type: ignore[untyped-decorator]

@@ -12,7 +12,7 @@
     {
       "name": "aurochs-llm-scrub",
       "description": "Detect and scrub LLM writing patterns from your prose. Regex-based pattern detection with ReDoS protection. Pre-commit hook integration. No LLM-as-judge in v0.1.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "author": {
         "name": "Stefan Kovalik",
         "email": "stefan@aurochs.agency"

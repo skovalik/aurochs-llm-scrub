@@ -1,6 +1,6 @@
 {
   "name": "aurochs-llm-scrub",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Detect and scrub LLM writing patterns from your prose. Regex-based pattern detection with ReDoS protection. Pre-commit hook integration. No LLM-as-judge in v0.1.",
   "homepage": "https://github.com/skovalik/aurochs-llm-scrub",
   "repository": "https://github.com/skovalik/aurochs-llm-scrub",
@@ -12,8 +12,7 @@
   "keywords": ["llm-scrub", "writing", "pre-commit", "claude-code-plugin", "mcp"],
   "mcpServers": {
     "aurochs-llm-scrub": {
-      "command": "python",
-      "args": ["-m", "aurochs_llm_scrub.mcp.scrub_server"]
+      "command": "llm-scrub-mcp"
     }
   }
 }
