@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -15,11 +16,14 @@ from aurochs_llm_scrub.core import (
 from aurochs_llm_scrub.core.db import MigrationRunner
 from aurochs_llm_scrub.core.rule_pack import register_default_pack
 from aurochs_llm_scrub.core.scrubber import (
+    _DEFAULT_CHUNK_SIZE,
+    _DEFAULT_OVERLAP,
     _iter_chunks,
     _line_number_for_offset,
     scan_dir,
     scan_file,
     scan_text,
+    scrub,
 )
 
 
@@ -93,6 +97,14 @@ class TestChunkIterator:
     def test_invalid_overlap_raises(self) -> None:
         with pytest.raises(ValueError, match="overlap"):
             list(_iter_chunks("abc", chunk_size=10, overlap=10))
+
+    def test_truncated_marks_windows_cut_before_the_end(self) -> None:
+        # 200 bytes in 64-byte steps with 16 overlap: the windows end at
+        # 80, 144, 200 and 200. Only the first two are cut short; the
+        # third reaches the true end although a fourth window follows.
+        chunks = list(_iter_chunks("x" * 200, chunk_size=64, overlap=16))
+        assert [c.truncated for c in chunks] == [True, True, False, False]
+        assert not next(_iter_chunks("hello", chunk_size=100, overlap=10)).truncated
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +235,140 @@ class TestScanText:
         # the rule is skipped. If detect returns "en" we accept findings.
         for f in findings:
             assert f.severity in {"P0", "P1", "P2"}
+
+
+# ---------------------------------------------------------------------------
+# scan_text: window edges
+# ---------------------------------------------------------------------------
+#
+# Inputs longer than one chunk are scanned in windows of chunk_size +
+# overlap bytes. A default scan's first window ends at byte _EDGE: the
+# text is cut there, so a pattern that reads "end of text" at that point
+# reads an edge that is not in the file.
+
+_EDGE = _DEFAULT_CHUNK_SIZE + _DEFAULT_OVERLAP
+
+
+def _filler(n_bytes: int) -> str:
+    """Return exactly ``n_bytes`` of ASCII lines, none ending in whitespace."""
+    full, rest = divmod(n_bytes, 100)
+    return ("x" * 99 + "\n") * full + ("x" * (rest - 1) + "\n" if rest else "")
+
+
+def _text_with(line: str, *, at: int, byte: int) -> str:
+    """Return filler + ``line`` + filler with ``line[at]`` on file byte ``byte``.
+
+    The trailing filler carries the text well past the first window.
+    """
+    return _filler(byte - at) + line + _filler(10_000)
+
+
+def _insert_rule(db_path: Path, *, rule_id: str, pattern: str) -> Rule:
+    """Add an always-on P0 rule to the default pack and return it."""
+    pack_id = _load_rules(db_path)[0].pack_id
+    conn = db_connect(db_path)
+    try:
+        cur = conn.execute(
+            "INSERT INTO rules "
+            "(pack_id, rule_id, name, pattern, severity_default, "
+            "language, description, enabled) "
+            "VALUES (?, ?, ?, ?, 'P0', NULL, ?, 1)",
+            (pack_id, rule_id, rule_id, pattern, rule_id),
+        )
+        rule_pk = int(cur.lastrowid)
+    finally:
+        conn.close()
+    return Rule(
+        id=rule_pk,
+        pack_id=pack_id,
+        rule_id=rule_id,
+        name=rule_id,
+        pattern=pattern,
+        severity_default="P0",
+        description=rule_id,
+    )
+
+
+class TestWindowEdges:
+    @pytest.mark.parametrize("ws", [" ", "\t"])
+    def test_whitespace_mid_line_on_window_end_is_not_trailing(
+        self, runs_db: Path, ws: str
+    ) -> None:
+        # The reported bug: `[ \t]+$` matched the character on the first
+        # window's last byte although the line carries on past the cut.
+        text = _text_with("y" * 31 + ws + "z" * 40 + "\n", at=31, byte=_EDGE - 1)
+        assert text[_EDGE - 1 : _EDGE + 1] == ws + "z"
+        assert not any(re.search(r"[ \t]+$", ln) for ln in text.split("\n"))
+        rules = _load_rules(runs_db, rule_id_prefix="p0-trailing-whitespace")
+        _run, findings = scan_text(runs_db, text, rules)
+        assert findings == []
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("alpha \nbeta\t\ngamma\n", [(5, 1, 1), (11, 1, 2)]),
+            ("alpha \r\nbeta\t\r\ngamma\r\n", [(5, 1, 1), (12, 1, 2)]),
+        ],
+    )
+    def test_trailing_whitespace_before_a_later_line_is_found(
+        self, runs_db: Path, text: str, expected: list[tuple[int, int, int]]
+    ) -> None:
+        # Rules compile without MULTILINE, so a bare `$` matched only at
+        # the end of the text: whitespace ending any earlier line went
+        # unseen.
+        rules = _load_rules(runs_db, rule_id_prefix="p0-trailing-whitespace")
+        _run, findings = scan_text(runs_db, text, rules)
+        assert [(f.file_offset, f.length, f.line_number) for f in findings] == expected
+
+    @pytest.mark.parametrize("lead", [0, _EDGE + 5_000])
+    @pytest.mark.parametrize("ending", ["\n", ""])
+    def test_trailing_whitespace_at_end_of_text_is_found(
+        self, runs_db: Path, lead: int, ending: str
+    ) -> None:
+        # The end of the last window is the true end of the text, so
+        # whitespace there is trailing with or without a final newline,
+        # in a one-window text and in a long one alike.
+        text = _filler(lead) + "tail " + ending
+        rules = _load_rules(runs_db, rule_id_prefix="p0-trailing-whitespace")
+        _run, findings = scan_text(runs_db, text, rules)
+        offset = len(text) - len(ending) - 1
+        assert [(f.file_offset, f.length) for f in findings] == [(offset, 1)]
+
+    def test_trailing_whitespace_where_window_end_meets_line_end_is_found(
+        self, runs_db: Path
+    ) -> None:
+        # A real trailing space on the first window's last byte: its
+        # newline is the first byte past the cut. The first window cannot
+        # see that newline; the second re-scans the overlap and must
+        # report the space exactly once.
+        text = _text_with("y" * 40 + " \n", at=40, byte=_EDGE - 1)
+        assert text[_EDGE - 1 : _EDGE + 1] == " \n"
+        rules = _load_rules(runs_db, rule_id_prefix="p0-trailing-whitespace")
+        _run, findings = scan_text(runs_db, text, rules)
+        assert [(f.file_offset, f.length) for f in findings] == [(_EDGE - 1, 1)]
+
+    def test_word_boundary_on_window_end_is_not_a_match(self, runs_db: Path) -> None:
+        # Same edge, another anchor: `\b` also matches at the end of a
+        # string, so a cut inside "catalog" just after "cat" matched
+        # `\bcat\b`. The guard is in the engine, not in one rule.
+        rule = _insert_rule(runs_db, rule_id="test-cat", pattern=r"\bcat\b")
+        text = _text_with("the catalog\n", at=4, byte=_EDGE - 3)
+        assert text[_EDGE - 3 : _EDGE + 1] == "cata"
+        _run, findings = scan_text(runs_db, text, [rule])
+        assert findings == []
+
+    @pytest.mark.parametrize("mode", ["scrub-to-stdout", "scrub-in-place"])
+    def test_scrub_keeps_mid_line_space_on_window_end(
+        self, runs_db: Path, tmp_path: Path, mode: str
+    ) -> None:
+        # p0-trailing-whitespace auto-fixes to "", so the false finding
+        # deleted the space and joined two words: silent corruption.
+        text = _text_with("y" * 31 + " " + "z" * 40 + "\n", at=31, byte=_EDGE - 1)
+        target = tmp_path / "draft.md"
+        target.write_bytes(text.encode("utf-8"))
+        result = scrub(target=target, db_path=runs_db, mode=mode)
+        assert result.cleaned_text == text
+        assert target.read_bytes() == text.encode("utf-8")
 
 
 # ---------------------------------------------------------------------------

@@ -11,7 +11,10 @@ Plan v4 contract:
   ``chunk_size`` byte windows with ``overlap`` extra bytes glued onto
   the trailing edge of each chunk so a regex spanning the boundary is
   captured by both. After scanning, findings are deduplicated by the
-  ``(file_offset, length, rule_id)`` tuple before insert.
+  ``(file_offset, length, rule_id)`` tuple before insert. A match that
+  ends exactly where a window was cut short of the input is dropped:
+  ``$``, ``\\Z`` and ``\\b`` read the cut as the end of the text, and the
+  next window re-scans those bytes whole.
 * **BLOCKER #2 — language detect global + per-chunk fallback.**
   ``langdetect.detect_langs`` runs on the full text first; if its
   confidence falls below 70%, each chunk is detected individually.
@@ -98,12 +101,15 @@ class _Chunk:
     final chunk which has no trailing overlap). ``language`` is the
     chunk's detected language tag (or None for unknown) — populated by
     the language gate. The engine consults it when applying rules with
-    a non-None ``language`` attribution.
+    a non-None ``language`` attribution. ``truncated`` is True when the
+    window stops short of the end of the input, so its last character
+    is not the end of the text.
     """
 
     start: int
     text: str
     language: str | None = None
+    truncated: bool = False
 
 
 def _iter_chunks(
@@ -168,7 +174,7 @@ def _iter_chunks(
             except UnicodeDecodeError:  # pragma: no cover - unlikely
                 chunk_text = chunk_bytes.decode("utf-8", errors="replace")
 
-        yield _Chunk(start=pos, text=chunk_text)
+        yield _Chunk(start=pos, text=chunk_text, truncated=end < n)
         pos += chunk_size  # advance by chunk_size only; overlap re-scanned
 
 
@@ -324,6 +330,8 @@ def scan_text(
             chunk language is known).
           - Apply with timeout. On timeout, append disabled_rules_log
             row and mark rule disabled in memory; continue.
+          - Drop a match that ends where the window was cut short of
+            the input; the next window re-scans it.
           - Collect matches as Finding rows (positions normalized to
             file-relative offsets).
     4. Dedup findings by (file_offset, length, rule_id).
@@ -475,6 +483,14 @@ def scan_text(
                 continue
 
             for m in matches:
+                # A match that ends exactly where a window was cut short
+                # read the cut as the end of the text: `$`, `\Z` and `\b`
+                # match there, and a greedy run stops there. The next
+                # window starts `overlap` bytes before the cut and
+                # re-scans those bytes whole, so the drop loses nothing
+                # shorter than the overlap.
+                if chunk.truncated and m.end() == len(chunk.text):
+                    continue
                 # Convert chunk-relative match positions to file-relative
                 # byte offsets per BLOCKER #6.
                 chunk_text = chunk.text
