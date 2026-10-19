@@ -55,13 +55,28 @@ time. When installed, every rule's pattern is run through
 ## Unicode / multi-byte char at chunk boundary
 
 - **Symptom:** The chunker's 64 KB window cuts through a UTF-8
-  multi-byte character.
-- **Mitigation:** The chunker walks the tail of the byte slice
-  backward up to 4 bytes (UTF-8 max) until the slice decodes cleanly.
-  The next chunk's overlap (4 KB) re-scans the same region so a
-  pattern spanning the boundary is captured by both chunks; the
-  cross-chunk dedup pass collapses duplicates by
-  `(file_offset, length, rule_id)`.
+  multi-byte character, at the window's end or at its start.
+- **Mitigation:** At the end, the chunker walks the tail of the byte
+  slice backward up to 3 bytes until the slice decodes cleanly. At the
+  start, a window whose start lands on a continuation byte starts at
+  that character's lead byte instead, so the window never opens with
+  U+FFFD and every finding keeps its true file offset. The next chunk's
+  overlap (4 KB) re-scans the same region so a pattern spanning the
+  boundary is captured by both chunks; the cross-chunk dedup pass
+  collapses duplicates by `(file_offset, length, rule_id)`.
+
+## Anchors and runs at a chunk boundary
+
+- **Symptom:** A window's edges are not the text's edges. At a cut end,
+  `$`, `\Z` and `\b` match as if the text ended there, and a greedy run
+  stops there. At a later window's start, `^`, `\b` and lookbehinds see
+  no text before it, and a run that crosses the start is matched again
+  from its middle.
+- **Mitigation:** The engine drops a match that ends exactly where a
+  window was cut short, and a match that starts on a later window's
+  first character. The neighboring window holds the same bytes with
+  real context on both sides, so nothing shorter than the 4 KB overlap
+  is lost. Keep a custom rule's matches and lookarounds well under 4 KB.
 
 ## Empty input
 

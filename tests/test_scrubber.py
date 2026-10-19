@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import random
 import re
+import time
 from pathlib import Path
 
 import pytest
@@ -105,6 +107,15 @@ class TestChunkIterator:
         chunks = list(_iter_chunks("x" * 200, chunk_size=64, overlap=16))
         assert [c.truncated for c in chunks] == [True, True, False, False]
         assert not next(_iter_chunks("hello", chunk_size=100, overlap=10)).truncated
+
+    def test_window_starts_on_a_character_boundary(self) -> None:
+        # Byte 8 falls inside U+2019 (bytes 7 to 9): the second window
+        # starts on its lead byte instead of decoding a fragment.
+        text = "a" * 7 + chr(0x2019) + "b" * 20
+        chunks = list(_iter_chunks(text, chunk_size=8, overlap=4))
+        assert chunks[1].start == 7
+        assert chunks[1].text.startswith(chr(0x2019))
+        assert not any(chr(0xFFFD) in c.text for c in chunks)
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +274,15 @@ def _text_with(line: str, *, at: int, byte: int) -> str:
     return _filler(byte - at) + line + _filler(10_000)
 
 
+def _text_after_split_character() -> str:
+    """Return a text whose second window would start inside U+2019.
+
+    A double space follows in that window, so its offset shows whether
+    the window was decoded from a fragment.
+    """
+    return "a" * (_DEFAULT_CHUNK_SIZE - 1) + chr(0x2019) + "b" * 5_000 + "  " + "c" * 100 + "\n"
+
+
 def _insert_rule(db_path: Path, *, rule_id: str, pattern: str) -> Rule:
     """Add an always-on P0 rule to the default pack and return it."""
     pack_id = _load_rules(db_path)[0].pack_id
@@ -369,6 +389,88 @@ class TestWindowEdges:
         result = scrub(target=target, db_path=runs_db, mode=mode)
         assert result.cleaned_text == text
         assert target.read_bytes() == text.encode("utf-8")
+
+    @pytest.mark.parametrize(
+        ("pattern", "line", "at"),
+        [(r"(?m)^cat\b", "the cat sat\n", 4), (r"\bcat\b", "bobcat food\n", 3)],
+    )
+    def test_anchor_on_window_start_is_not_a_match(
+        self, runs_db: Path, pattern: str, line: str, at: int
+    ) -> None:
+        # The mirror edge: the second window starts at byte
+        # _DEFAULT_CHUNK_SIZE, here in the middle of a line, and `^` and
+        # `\b` read that start as the start of the text.
+        rule = _insert_rule(runs_db, rule_id="test-cat", pattern=pattern)
+        text = _text_with(line, at=at, byte=_DEFAULT_CHUNK_SIZE)
+        assert text[_DEFAULT_CHUNK_SIZE : _DEFAULT_CHUNK_SIZE + 3] == "cat"
+        _run, findings = scan_text(runs_db, text, [rule])
+        assert findings == []
+
+    def test_trailing_run_across_window_start_is_reported_once(
+        self, runs_db: Path
+    ) -> None:
+        # Three trailing spaces on the bytes either side of the second
+        # window's start: the first window sees the run whole, and the
+        # second, starting inside it, reported its tail a second time.
+        text = _text_with("y" * 40 + "   \n", at=40, byte=_DEFAULT_CHUNK_SIZE - 2)
+        assert text[_DEFAULT_CHUNK_SIZE - 2 : _DEFAULT_CHUNK_SIZE + 2] == "   \n"
+        rules = _load_rules(runs_db, rule_id_prefix="p0-trailing-whitespace")
+        _run, findings = scan_text(runs_db, text, rules)
+        assert [(f.file_offset, f.length) for f in findings] == [
+            (_DEFAULT_CHUNK_SIZE - 2, 3)
+        ]
+
+    def test_offsets_after_a_window_that_starts_inside_a_character(
+        self, runs_db: Path
+    ) -> None:
+        # U+2019 spans bytes C-1 to C+1, so the second window's start
+        # falls inside it; decoding that fragment shifted every offset
+        # found in the window.
+        text = _text_after_split_character()
+        rules = _load_rules(runs_db, rule_id_prefix="p0-double-space")
+        _run, findings = scan_text(runs_db, text, rules)
+        assert [f.file_offset for f in findings] == [text.encode("utf-8").index(b"  ")]
+
+    def test_scrub_fixes_the_right_bytes_after_a_window_that_starts_inside_a_character(
+        self, runs_db: Path, tmp_path: Path
+    ) -> None:
+        # With the offset shifted by four bytes, scrub left the double
+        # space alone and replaced two letters after it.
+        text = _text_after_split_character()
+        target = tmp_path / "draft.md"
+        target.write_bytes(text.encode("utf-8"))
+        result = scrub(target=target, db_path=runs_db, mode="scrub-to-stdout")
+        assert result.cleaned_text == text.replace("  ", " ")
+
+    def test_long_run_of_mid_line_spaces_scans_in_linear_time(
+        self, runs_db: Path
+    ) -> None:
+        # Without a run-start anchor every start inside the run re-scans
+        # the rest of it: 30,000 mid-line spaces took 8.6 s against 0.23 s
+        # of fixed engine cost. The per-rule timeout cannot cut a running
+        # regex short, so the pattern itself has to stay linear.
+        rules = _load_rules(runs_db, rule_id_prefix="p0-trailing-whitespace")
+        started = time.perf_counter()
+        _run, findings = scan_text(runs_db, "a" + " " * 30_000 + "b\n", rules)
+        assert time.perf_counter() - started < 2.0
+        assert findings == []
+
+    def test_trailing_whitespace_pattern_keeps_its_line_end_meaning(
+        self, runs_db: Path
+    ) -> None:
+        # The shipped pattern may change shape for speed, never meaning:
+        # on any mix of the characters that matter it finds exactly the
+        # spans of the plain definition.
+        plain = re.compile(r"[ \t]+(?=\r?\n)|[ \t]+\Z")
+        rule = _load_rules(runs_db, rule_id_prefix="p0-trailing-whitespace")[0]
+        shipped = re.compile(rule.pattern)
+        rng = random.Random(7)
+        pieces = [" ", "\t", "\n", "\r\n", "a", "b"]
+        for _ in range(2_000):
+            s = "".join(rng.choice(pieces) for _ in range(rng.randint(0, 40)))
+            assert [m.span() for m in shipped.finditer(s)] == [
+                m.span() for m in plain.finditer(s)
+            ], s
 
 
 # ---------------------------------------------------------------------------

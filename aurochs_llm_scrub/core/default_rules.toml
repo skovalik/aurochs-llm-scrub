@@ -58,7 +58,9 @@ language = ""
 # of the scanned text. The lookahead finds the end of every line and `\Z`
 # a last line with no newline. The engine drops any match that ends where
 # it cut a window short, so `\Z` counts only at the true end of the text.
-pattern = "[ \\t]+(?=\\r?\\n)|[ \\t]+\\Z"
+# `(?<![ \t])` starts each match at the start of its run, which keeps a
+# long run of mid-line spaces linear instead of quadratic.
+pattern = "(?<![ \\t])[ \\t]+(?=\\r?\\n)|(?<![ \\t])[ \\t]+\\Z"
 description = "Whitespace at end of line. Auto-fixable: strip."
 
 # ---------------------------------------------------------------------------

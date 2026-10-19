@@ -14,7 +14,11 @@ Plan v4 contract:
   ``(file_offset, length, rule_id)`` tuple before insert. A match that
   ends exactly where a window was cut short of the input is dropped:
   ``$``, ``\\Z`` and ``\\b`` read the cut as the end of the text, and the
-  next window re-scans those bytes whole.
+  next window re-scans those bytes whole. Likewise a match that starts
+  on a later window's first character is dropped (``^``, ``\\b`` and
+  lookbehinds read it as the start of the text, and the previous window
+  holds those bytes whole), and a window never starts inside a
+  multi-byte character.
 * **BLOCKER #2 — language detect global + per-chunk fallback.**
   ``langdetect.detect_langs`` runs on the full text first; if its
   confidence falls below 70%, each chunk is detected individually.
@@ -124,6 +128,8 @@ def _iter_chunks(
     slicing is codepoint-safe so we do not split a multi-byte char.
     The ``start`` field tracks the byte offset of the chunk in the
     original file, since findings are file-relative per BLOCKER #6.
+    A window whose nominal start falls inside a multi-byte character
+    starts at that character's lead byte instead.
 
     For inputs <= ``chunk_size``, a single chunk is yielded with no
     overlap; this is the hot path for the typical CLI run on a draft.
@@ -148,11 +154,19 @@ def _iter_chunks(
 
     pos = 0
     while pos < n:
+        # A window starts on a character, never inside one: a start on
+        # a UTF-8 continuation byte moves back to its lead byte (at most
+        # 3 bytes, which the previous window's overlap covers anyway).
+        # Decoding from a fragment would open the text with U+FFFD and
+        # shift every offset found in the window.
+        start = pos
+        while start > 0 and (encoded[start] & 0xC0) == 0x80:
+            start -= 1
         # Slice on bytes so we get exact byte-aligned chunks. We then
         # pad backward to a valid utf-8 char boundary so we don't yield
         # broken text. The recovery is bounded — at most 3 bytes back.
         end = min(pos + chunk_size + overlap, n)
-        chunk_bytes = encoded[pos:end]
+        chunk_bytes = encoded[start:end]
 
         # If end < n we may have cut a multi-byte char. Walk the tail
         # back until utf-8 decodes clean.
@@ -174,7 +188,7 @@ def _iter_chunks(
             except UnicodeDecodeError:  # pragma: no cover - unlikely
                 chunk_text = chunk_bytes.decode("utf-8", errors="replace")
 
-        yield _Chunk(start=pos, text=chunk_text, truncated=end < n)
+        yield _Chunk(start=start, text=chunk_text, truncated=end < n)
         pos += chunk_size  # advance by chunk_size only; overlap re-scanned
 
 
@@ -331,7 +345,8 @@ def scan_text(
           - Apply with timeout. On timeout, append disabled_rules_log
             row and mark rule disabled in memory; continue.
           - Drop a match that ends where the window was cut short of
-            the input; the next window re-scans it.
+            the input, or that starts on a later window's first
+            character; the neighboring window covers it.
           - Collect matches as Finding rows (positions normalized to
             file-relative offsets).
     4. Dedup findings by (file_offset, length, rule_id).
@@ -490,6 +505,13 @@ def scan_text(
                 # re-scans those bytes whole, so the drop loses nothing
                 # shorter than the overlap.
                 if chunk.truncated and m.end() == len(chunk.text):
+                    continue
+                # The mirror at a later window's first character: `^`,
+                # `\b` and a lookbehind read it as the start of the text,
+                # and a run that crosses it was already matched whole by
+                # the previous window, whose overlap holds these bytes
+                # with real context on both sides.
+                if chunk.start > 0 and m.start() == 0:
                     continue
                 # Convert chunk-relative match positions to file-relative
                 # byte offsets per BLOCKER #6.
